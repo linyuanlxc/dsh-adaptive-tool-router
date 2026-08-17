@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dsh-adaptive-tool-router"
+version = "0.1.0"
+description = "Adaptive tool retrieval and ranking for DeepSeek Harness"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest"]
+dense = ["sentence-transformers"]
+toolret = ["datasets", "huggingface-hub"]
+
+[project.scripts]
+dsh-tool-router-eval = "dsh_tool_router.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dsh_tool_router"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

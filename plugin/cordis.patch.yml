@@ -1,0 +1,7 @@
+- insert:
+    - id: adaptive-tool-router
+      name: ./dist/index.js
+      config:
+        shadow: true
+        topK: 5
+        logPath: ~/.dsh/adaptive-tool-router/shadow.jsonl

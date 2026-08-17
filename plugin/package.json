@@ -1,0 +1,29 @@
+{
+  "name": "@dsh-adaptive-tool-router/plugin",
+  "version": "0.1.0",
+  "description": "Shadow-mode adaptive tool router for DeepSeek Harness",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "cordis.patch.yml"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "*",
+    "@deepseek-ai/dsh-agent": "*",
+    "@deepseek-ai/dsh-tools": "*"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-agent": "^0.0.1-rc.5",
+    "@deepseek-ai/dsh-tools": "^0.0.1-rc.1",
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
+  }
+}

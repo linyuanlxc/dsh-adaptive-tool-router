@@ -1,0 +1,17 @@
+{
+  "dataset": "ToolRet",
+  "task": "autotools-weather",
+  "retriever": "dependency-free BM25",
+  "tool_count": 44453,
+  "query_count": 11,
+  "metrics": {
+    "mrr": 0.01515151515151515,
+    "recall@1": 0.0,
+    "recall@5": 0.0,
+    "recall@10": 0.0303030303030303,
+    "ndcg@1": 0.0,
+    "ndcg@5": 0.0,
+    "ndcg@10": 0.01519640499692748
+  },
+  "notes": "Initial smoke baseline over the full 44,453-tool corpus; not a final benchmark result."
+}

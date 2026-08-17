@@ -1,0 +1,3 @@
+{"id":"q1","query":"What will the weather be in Beijing tomorrow?","labels":["weather"]}
+{"id":"q2","query":"Look up the current AAPL share price","labels":["stocks"]}
+{"id":"q3","query":"Find recent public information about DeepSeek Harness","labels":["search"]}

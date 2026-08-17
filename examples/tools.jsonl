@@ -1,0 +1,3 @@
+{"id":"weather","name":"weather_forecast","description":"Get a weather forecast for a city","parameters":{"city":{"type":"string"},"date":{"type":"string"}},"server":"weather"}
+{"id":"stocks","name":"stock_price","description":"Get the current market price for a stock ticker","parameters":{"ticker":{"type":"string"}},"server":"finance"}
+{"id":"search","name":"web_search","description":"Search the public web for recent information","parameters":{"query":{"type":"string"}},"server":"web"}
