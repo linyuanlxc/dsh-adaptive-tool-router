@@ -8,5 +8,3 @@ dist/
 build/
 data/
 node_modules/
-plugin/node_modules/
-plugin/dist/

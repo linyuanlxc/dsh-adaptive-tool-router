@@ -1,8 +1,0 @@
-- insert:
-    - id: adaptive-tool-router
-      name: dsh-adaptive-tool-router
-      config:
-        shadow: true
-        topK: 8
-        alwaysAllow:
-          - tool_search

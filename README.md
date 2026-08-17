@@ -19,7 +19,7 @@ Restrict：tools.restrict({ allow: alwaysAllow ∪ Top-K })
 失败则 fail-open，不阻断 Agent
 ```
 
-离线评测（ToolRet / JSONL）用来对照召回策略，**不是这个仓库的主交付**。主交付是可以 `link` / `--patch` 进 DSH 的插件。
+离线评测（ToolRet / JSONL）用来对照召回策略，**不是这个仓库的主交付**。主交付是一条 `dsh plugin add` 就能装进 DSH 的插件。
 
 ## 当前行为
 
@@ -28,61 +28,37 @@ Restrict：tools.restrict({ allow: alwaysAllow ∪ Top-K })
 - 排序失败、写日志失败、`restrict` 不可用时都 **fail-open**，Agent 继续看到原工具集。
 - 运行时排序在插件内完成，不依赖 Python、不调用外部 embedding 服务。
 
-## 安装
+## 快速开始
 
-插件是纯 host 半，没有 Web UI。本地开发用 `link`，临时验证用 `--patch`。
-
-### 1. 构建检查
+插件运行时零依赖：只有一个会被编译擦除的类型导入，其余全部从 `ctx` 取。所以装它不需要 `npm install`，也不需要构建。
 
 ```bash
-cd plugin
-npm install
-npm test
-```
-
-### 2. 挂到 web profile
-
-在 `~/.dsh/profiles/web/package.json` 里加入：
-
-```json
-{
-  "dependencies": {
-    "dsh-adaptive-tool-router": "link:/absolute/path/to/dsh-adaptive-tool-router"
-  }
-}
-```
-
-仓库根目录的 `package.json` 已声明 `dsh.bundle`，`dsh plugin add` 或 profile 安装后应自动挂上 `cordis.patch.yml`。若使用 `github:` 源、补丁没有写进去，再手动补：
-
-```yaml
-# ~/.dsh/profiles/web/cordis.patch.yml
-- insert:
-    - id: adaptive-tool-router
-      name: dsh-adaptive-tool-router
-      config:
-        shadow: true
-        topK: 8
-        logPath: /tmp/dsh-adaptive-tool-router.jsonl
-        alwaysAllow:
-          - tool_search
-```
-
-```bash
-cd ~/.dsh/profiles/web && pnpm install
+git clone https://github.com/linyuanlxc/dsh-adaptive-tool-router
+cd dsh-adaptive-tool-router
+dsh plugin add "$PWD"
 dsh web
 ```
 
-### 3. 不改持久 profile 的验证
+仓库根目录声明了 `dsh.bundle`，`dsh plugin add` 会自动挂上 `cordis.patch.yml` 里的默认 Shadow 配置，不用手写 `- insert:`。
+
+启动后每一步应看到：
+
+```text
+[dsh-adaptive-tool-router] shadow topK=8 tools=42 recommend=read, bash, grep, ...
+```
+
+没有这行说明插件没挂上：确认 `~/.dsh/profiles/web/cordis.patch.yml` 里有 `adaptive-tool-router` 条目，以及 `pnpm install` 无报错。
+
+### 只想先试一次
+
+不改持久 profile，用 headless 加配置覆盖层跑一句：
 
 ```bash
+dsh plugin --profile headless add "$PWD"
 dsh --profile headless --patch ./plugin-test.cordis.yml "查一下北京明天天气"
 ```
 
-通过时应同时看到：
-
-- 日志行：`[dsh-adaptive-tool-router] shadow topK=8 tools=... recommend=...`
-- 若配置了 `logPath`，JSONL 里有本轮 query、候选数和推荐列表
-- Agent 正常结束；Shadow 下工具调用不受插件拦截
+`--patch` 只覆盖配置，包仍需装进目标 profile。这一层额外打开了 `logPath`，决策会写到 `/tmp/dsh-tool-router-shadow.jsonl`。
 
 ## 配置
 
@@ -113,17 +89,18 @@ dsh --profile headless --patch ./plugin-test.cordis.yml "查一下北京明天�
 
 ## 插件结构
 
+整个仓库只有一个 Node 包，入口就在根目录，所以 `dsh plugin add <repo>` 能直接装。
+
 ```text
-package.json              # 仓库根：dsh plugin / github 安装入口
+package.json              # 唯一的包声明：入口、dsh.bundle、测试脚本
 cordis.patch.yml          # 默认挂载与 Shadow 配置
-plugin-test.cordis.yml    # --patch 临时验证
-plugin/
-  src/index.ts            # apply(ctx)：接 agent/pre-step
-  src/rank.ts             # BM25 纯函数
-  src/query.ts            # 从 messages 抽查询
-  src/config.ts           # 配置与保留工具
-  tests/                  # 纯函数 + waterfall 契约测试
-eval 代码在 src/dsh_tool_router/，只服务离线对照
+plugin-test.cordis.yml    # --patch 配置覆盖层
+plugin/src/index.ts       # apply(ctx)：接 agent/pre-step
+plugin/src/rank.ts        # BM25 纯函数
+plugin/src/query.ts       # 从 messages 抽查询
+plugin/src/config.ts      # 配置与保留工具
+plugin/tests/             # 纯函数 + waterfall 契约测试
+src/dsh_tool_router/      # Python 离线评测，不参与运行时
 ```
 
 设计约束：
@@ -136,8 +113,9 @@ eval 代码在 src/dsh_tool_router/，只服务离线对照
 ## 开发
 
 ```bash
-cd plugin && npm test
-python3 -m pip install -e ".[dev]" && pytest
+npm install
+npm test        # 9 个契约与纯函数测试
+npm run check   # tsc --noEmit
 ```
 
 改召回规则先改 `plugin/src/rank.ts` 和契约测试；Python 侧的 BM25 是同一套离线对照，不是另一套线上逻辑。

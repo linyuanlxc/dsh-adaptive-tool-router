@@ -1,5 +1,6 @@
-# Temporary overlay for `dsh --patch ./plugin-test.cordis.yml`.
-# Does not mutate a persistent profile.
+# Config overlay for `dsh --patch ./plugin-test.cordis.yml`.
+# The package still has to be installed in the target profile; this file only
+# keeps the verbose/logging settings out of a persistent profile.
 - insert:
     - id: adaptive-tool-router
       name: dsh-adaptive-tool-router
@@ -7,6 +8,6 @@
         shadow: true
         topK: 8
         verbose: true
-        logPath: ./reports/shadow-decisions.jsonl
+        logPath: /tmp/dsh-tool-router-shadow.jsonl
         alwaysAllow:
           - tool_search
