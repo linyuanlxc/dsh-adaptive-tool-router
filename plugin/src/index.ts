@@ -1,85 +1,140 @@
+/**
+ * DeepSeek Harness host plugin: rank the current tool catalog before each step.
+ *
+ * Default Shadow Mode only logs Top-K recommendations. Restriction mode uses
+ * `tools.restrict({ allow })` and fail-opens back to the full catalog.
+ */
 import type { Context } from '@deepseek-ai/cordis'
-import type { PreStepDecision } from '@deepseek-ai/dsh-agent'
-import '@deepseek-ai/dsh-tools'
-import { appendFile, mkdir } from 'node:fs/promises'
-import { dirname } from 'node:path'
+import { resolveConfig, unique, type RouterConfig } from './config.ts'
+import { queryFromMessages } from './query.ts'
+import { rankTools, type RankedTool, type ToolSchema } from './rank.ts'
 
 export const name = 'dsh-adaptive-tool-router'
 export const inject = ['tools']
+export type { RouterConfig }
 
-export interface Config {
-  /** Shadow mode never restricts tools; it only logs recommendations. */
-  shadow?: boolean
-  topK?: number
-  logPath?: string
+interface ToolService {
+  schemas?: () => ToolSchema[]
+  restrict?: (filter: { allow: string[] }) => () => void
 }
 
-interface RankedTool {
-  name: string
-  score: number
-}
+type PreStepHandler = (
+  payload: Record<string, unknown>,
+  next: () => unknown,
+) => unknown | Promise<unknown>
 
-export function apply(ctx: Context, config: Config = {}): void {
-  const shadow = config.shadow ?? true
-  const topK = config.topK ?? 5
-  if (!shadow) {
-    throw new Error('active restriction is intentionally disabled in v0.1; collect shadow data first')
+export function apply(ctx: Context, config: RouterConfig = {}): void {
+  const resolved = resolveConfig(config)
+  let liftRestriction: (() => void) | undefined
+
+  const runtime = ctx as unknown as {
+    on: (event: string, handler: PreStepHandler) => void
+    effect?: (factory: () => () => void) => void
   }
-  if (!Number.isInteger(topK) || topK <= 0) {
-    throw new Error('topK must be a positive integer')
-  }
-
-  ctx.on('agent/pre-step', async (
-    { agent, messages, turn, step },
-    next,
-  ): Promise<PreStepDecision> => {
-    const query = messages.map(message => JSON.stringify(message.content)).join('\n')
-    const schemas = agent.ctx.tools.schemas()
-    const ranked = rankByTokenOverlap(query, schemas).slice(0, topK)
-
-    if (config.logPath) {
-      const record = {
-        time: new Date().toISOString(),
-        mode: 'shadow',
-        turn,
-        step,
-        query,
-        candidateCount: schemas.length,
-        recommendations: ranked,
+  runtime.effect?.(() => () => {
+    liftRestriction?.()
+    liftRestriction = undefined
+  })
+  runtime.on('agent/pre-step', async (payload, next) => {
+    try {
+      const decision = recommend(payload, resolved)
+      await persistDecision(resolved, decision)
+      if (!resolved.shadow) {
+        liftRestriction?.()
+        liftRestriction = applyRestriction(payload, decision.allow)
       }
-      try {
-        await mkdir(dirname(config.logPath), { recursive: true })
-        await appendFile(config.logPath, `${JSON.stringify(record)}\n`, 'utf8')
-      } catch (error) {
-        // Observation must never block an agent step.
-        console.warn('[dsh-adaptive-tool-router] failed to append shadow log', error)
-      }
+    } catch (error) {
+      liftRestriction?.()
+      liftRestriction = undefined
+      console.warn('[dsh-adaptive-tool-router] fail-open after ranking error', error)
     }
 
     return next()
   })
 }
 
-function rankByTokenOverlap(
-  query: string,
-  schemas: ReadonlyArray<{ name: string; description?: string; parameters?: unknown }>,
-): RankedTool[] {
-  const queryTokens = tokenize(query)
-  return schemas
-    .map(schema => {
-      const document = [
-        schema.name,
-        schema.description ?? '',
-        JSON.stringify(schema.parameters ?? {}),
-      ].join(' ')
-      const documentTokens = tokenize(document)
-      const overlap = [...queryTokens].filter(token => documentTokens.has(token)).length
-      const score = queryTokens.size === 0 ? 0 : overlap / queryTokens.size
-      return { name: schema.name, score }
-    })
-    .sort((left, right) => right.score - left.score || left.name.localeCompare(right.name))
+export function recommend(
+  payload: Record<string, unknown>,
+  config: ReturnType<typeof resolveConfig>,
+): {
+  query: string
+  candidateCount: number
+  recommendations: RankedTool[]
+  allow: string[]
+} {
+  const messages = Array.isArray(payload.messages) ? payload.messages : []
+  const query = queryFromMessages(messages)
+  const schemas = readSchemas(payload)
+  const recommendations = rankTools(query, schemas, {
+    limit: config.topK,
+    k1: config.k1,
+    b: config.b,
+  })
+  return {
+    query,
+    candidateCount: schemas.length,
+    recommendations,
+    allow: unique([
+      ...config.alwaysAllow.filter(name => schemas.some(schema => schema.name === name)),
+      ...recommendations.map(item => item.name),
+    ]),
+  }
 }
 
-function tokenize(text: string): Set<string> {
-  return new Set(text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) ?? [])
+function readSchemas(payload: Record<string, unknown>): ToolSchema[] {
+  const tools = readToolService(payload)
+  const schemas = tools?.schemas?.() ?? []
+  return Array.isArray(schemas) ? schemas : []
+}
+
+function applyRestriction(
+  payload: Record<string, unknown>,
+  allow: string[],
+): (() => void) | undefined {
+  if (allow.length === 0) {
+    return undefined
+  }
+  const restrict = readToolService(payload)?.restrict
+  if (typeof restrict !== 'function') {
+    throw new Error('tools.restrict is not available on the agent context')
+  }
+  return restrict({ allow })
+}
+
+function readToolService(payload: Record<string, unknown>): ToolService | undefined {
+  const agent = payload.agent as { ctx?: { tools?: ToolService } } | undefined
+  return agent?.ctx?.tools
+}
+
+async function persistDecision(
+  config: ReturnType<typeof resolveConfig>,
+  decision: ReturnType<typeof recommend>,
+): Promise<void> {
+  const names = decision.recommendations.map(item => item.name).join(', ')
+  if (config.verbose) {
+    const mode = config.shadow ? 'shadow' : 'restrict'
+    console.log(
+      `[dsh-adaptive-tool-router] ${mode} topK=${config.topK} tools=${decision.candidateCount} recommend=${names || '(none)'}`,
+    )
+  }
+  if (!config.logPath) {
+    return
+  }
+
+  const { appendFile, mkdir } = await import('node:fs/promises')
+  const { dirname } = await import('node:path')
+  const record = {
+    time: new Date().toISOString(),
+    mode: config.shadow ? 'shadow' : 'restrict',
+    query: decision.query,
+    candidateCount: decision.candidateCount,
+    recommendations: decision.recommendations,
+    allow: decision.allow,
+  }
+  try {
+    await mkdir(dirname(config.logPath), { recursive: true })
+    await appendFile(config.logPath, `${JSON.stringify(record)}\n`, 'utf8')
+  } catch (error) {
+    console.warn('[dsh-adaptive-tool-router] failed to append decision log', error)
+  }
 }

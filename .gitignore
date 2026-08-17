@@ -7,5 +7,6 @@ __pycache__/
 dist/
 build/
 data/
+node_modules/
 plugin/node_modules/
 plugin/dist/

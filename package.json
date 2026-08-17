@@ -3,17 +3,18 @@
   "version": "0.1.0",
   "description": "DeepSeek Harness plugin that ranks and optionally discloses Top-K tools before each agent step",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "./plugin/src/index.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
+      "types": "./plugin/src/index.ts",
+      "default": "./plugin/src/index.ts"
     },
     "./package.json": "./package.json"
   },
   "files": [
-    "src",
-    "cordis.patch.yml"
+    "plugin/src",
+    "cordis.patch.yml",
+    "README.md"
   ],
   "keywords": [
     "dsh-plugin",
@@ -26,19 +27,12 @@
     }
   },
   "scripts": {
-    "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "npm test --prefix plugin",
+    "check": "npm run check --prefix plugin"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-agent": "^0.1.0-rc.6"
-  },
-  "devDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-agent": "^0.1.0-rc.6",
-    "@types/node": "^24.0.0",
-    "typescript": "^5.6.0",
-    "vitest": "^3.0.0"
   },
   "engines": {
     "node": ">=20"

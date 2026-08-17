@@ -1,0 +1,12 @@
+# Temporary overlay for `dsh --patch ./plugin-test.cordis.yml`.
+# Does not mutate a persistent profile.
+- insert:
+    - id: adaptive-tool-router
+      name: dsh-adaptive-tool-router
+      config:
+        shadow: true
+        topK: 8
+        verbose: true
+        logPath: ./reports/shadow-decisions.jsonl
+        alwaysAllow:
+          - tool_search
